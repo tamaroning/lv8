@@ -12,6 +12,10 @@ use crate::runtime::{self};
 )]
 pub struct Cli {
     pub wasmfile_path: PathBuf,
+
+    /// Arguments after -- are passed to wasm module
+    #[arg(trailing_var_arg = true)]
+    wasm_args: Vec<String>,
 }
 
 pub fn run() -> Result<i32> {

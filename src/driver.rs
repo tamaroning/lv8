@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -9,7 +10,7 @@ pub struct Cli {
     pub wasmfile_path: PathBuf,
 }
 
-pub fn run() {
+pub fn run() -> Result<i32> {
     let args = Cli::parse();
-    runtime::run(&args);
+    runtime::run(&args)
 }

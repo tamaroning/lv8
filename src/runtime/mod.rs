@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::{
     cell::UnsafeCell,
     sync::{Mutex, OnceLock},
@@ -12,10 +13,10 @@ use crate::driver::{self, Cli};
 /// Global WASI context
 static WASI_CTX: OnceLock<Mutex<WasiCtx>> = OnceLock::new();
 
-pub fn run(args: &Cli) {
+pub fn run(args: &Cli) -> Result<i32> {
     init_v8();
-    let mut runtime = create_runtime(args);
-    runtime.run();
+    let mut runtime = create_runtime(args)?;
+    runtime.run()
 }
 
 struct Runtime {
@@ -24,7 +25,7 @@ struct Runtime {
 }
 
 impl Runtime {
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<i32> {
         let scope = &mut v8::HandleScope::new(&mut self.isolate);
         let context = v8::Context::new(scope, Default::default());
         let scope = &mut v8::ContextScope::new(scope, context);
@@ -36,15 +37,26 @@ impl Runtime {
         let exports = exports.to_object(scope).unwrap();
 
         let str_start = v8::String::new(scope, "_start").unwrap();
-        let start = exports.get(scope, str_start.into()).unwrap();
+        let Some(start) = exports.get(scope, str_start.into()) else {
+            return Err(anyhow!("Wasm module does not export _start function"));
+        };
         let start = start.cast::<v8::Function>();
 
         // call instance.exports._start()
         let ret = start.call(scope, exports.into(), &[]).unwrap();
-        if ret.type_repr() == "number" {
-            // TODO: exit code
+        if ret.type_repr() == "undefined" {
+            Ok(0)
+        } else if ret.type_repr() == "number" {
+            if let Some(code) = ret.to_int32(scope) {
+                Ok(code.value())
+            } else {
+                Err(anyhow!("Wasm module exited with non-i32 number"))
+            }
         } else {
-            // TODO: error
+            Err(anyhow!(
+                "Wasm module exited with value of type {}",
+                ret.type_repr()
+            ))
         }
     }
 }
@@ -55,7 +67,7 @@ fn init_v8() {
     v8::V8::initialize();
 }
 
-fn create_runtime(args: &driver::Cli) -> Runtime {
+fn create_runtime(args: &driver::Cli) -> Result<Runtime> {
     let mut isolate = v8::Isolate::new(Default::default());
     let instance = {
         let scope = &mut v8::HandleScope::new(&mut isolate);
@@ -100,10 +112,10 @@ fn create_runtime(args: &driver::Cli) -> Runtime {
         v8::Global::new(scope, instance)
     };
 
-    Runtime {
+    Ok(Runtime {
         isolate,
         wasm_instance: instance,
-    }
+    })
 }
 
 fn get_wasi_ctx_mut() -> &'static Mutex<WasiCtx> {

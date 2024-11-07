@@ -1,17 +1,8 @@
+mod wasi;
+
 use anyhow::{anyhow, Result};
-use std::{
-    cell::UnsafeCell,
-    sync::{Mutex, OnceLock},
-};
-use tokio::runtime::Runtime as TokioRuntime;
-use wasi_common::snapshots::preview_1::wasi_snapshot_preview1 as preview1;
-use wasi_common::sync::WasiCtxBuilder;
-use wasi_common::WasiCtx;
 
 use crate::driver::{self, Cli};
-
-/// Global WASI context
-static WASI_CTX: OnceLock<Mutex<WasiCtx>> = OnceLock::new();
 
 pub fn run(args: &Cli) -> Result<i32> {
     init_v8();
@@ -89,11 +80,11 @@ fn create_runtime(args: &driver::Cli) -> Result<Runtime> {
 
         // prepare imports.wasi_snapshot_preview1
         let import_wasi_p1 = v8::Object::new(scope);
-        let func_template = v8::FunctionTemplate::new(scope, fd_write);
-        let func = func_template.get_function(scope).unwrap();
+        let fdwrite_template = v8::FunctionTemplate::new(scope, wasi::fd_write);
+        let fdwrite_template = fdwrite_template.get_function(scope).unwrap();
         // set function to import object
         let str_fd_write = v8::String::new(scope, "fd_write").unwrap();
-        import_wasi_p1.set(scope, str_fd_write.into(), func.into());
+        import_wasi_p1.set(scope, str_fd_write.into(), fdwrite_template.into());
 
         let str_wasi_p1 = v8::String::new(scope, "wasi_snapshot_preview1").unwrap();
         import_object.set(scope, str_wasi_p1.into(), import_wasi_p1.into());
@@ -116,78 +107,6 @@ fn create_runtime(args: &driver::Cli) -> Result<Runtime> {
         isolate,
         wasm_instance: instance,
     })
-}
-
-fn get_wasi_ctx_mut() -> &'static Mutex<WasiCtx> {
-    WASI_CTX.get_or_init(|| {
-        let mut builder = WasiCtxBuilder::new();
-        let mut builder = builder.inherit_stdin().inherit_stdout().inherit_stderr();
-        //let mut buider = builder.inherit_args();
-        builder = builder.inherit_env().unwrap();
-        let dir = cap_std::fs::Dir::from_std_file(std::fs::File::open(".").unwrap());
-        builder = builder.preopened_dir(dir, "/").unwrap();
-        Mutex::new(builder.build())
-    })
-}
-
-fn fd_write(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    // get global object
-    let context = scope.get_current_context();
-    let global = context.global(scope);
-    // access to global memory
-    let str_instance = v8::String::new(scope, "gInstance").unwrap();
-    let instance = global.get(scope, str_instance.into()).unwrap();
-    let instance = instance.to_object(scope).unwrap();
-
-    // access to instance.exports.memory.buffer
-    let str_exports = v8::String::new(scope, "exports").unwrap();
-    let exports = instance.get(scope, str_exports.into()).unwrap();
-    let exports = exports.to_object(scope).unwrap();
-    let str_memory = v8::String::new(scope, "memory").unwrap();
-    let memory = exports.get(scope, str_memory.into()).unwrap();
-    let memory = memory.to_object(scope).unwrap();
-
-    // cast memory.buffer to ArrayBuffer
-    let str_buffer = v8::String::new(scope, "buffer").unwrap();
-    let array_buffer = memory.get(scope, str_buffer.into()).unwrap();
-    let array_buffer = array_buffer.cast::<v8::ArrayBuffer>();
-    let backing_store = array_buffer.get_backing_store();
-    let memory: &mut [u8] = unsafe {
-        std::slice::from_raw_parts_mut(
-            backing_store.data().unwrap().as_ptr() as *mut u8,
-            backing_store.byte_length(),
-        )
-    };
-    let memory = unsafe { &*(memory as *mut [u8] as *mut [UnsafeCell<u8>]) };
-    let mut memory = wiggle::GuestMemory::Shared(memory);
-
-    let arg0 = args.get(0);
-    let arg0 = arg0.integer_value(scope).unwrap_or_default() as i32;
-    let arg1 = args.get(1);
-    let arg1 = arg1.integer_value(scope).unwrap_or_default() as i32;
-    let arg2 = args.get(2);
-    let arg2 = arg2.integer_value(scope).unwrap_or_default() as i32;
-    let arg3 = args.get(3);
-    let arg3 = arg3.integer_value(scope).unwrap_or_default() as i32;
-
-    let mut wasi_ctx = get_wasi_ctx_mut().lock().unwrap();
-    let result = TokioRuntime::new()
-        .unwrap()
-        .block_on(preview1::fd_write(
-            &mut *wasi_ctx,
-            &mut memory,
-            arg0,
-            arg1,
-            arg2,
-            arg3,
-        ))
-        .unwrap();
-
-    rv.set(v8::Integer::new(scope, result).into());
 }
 
 /*

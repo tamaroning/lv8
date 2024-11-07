@@ -105,53 +105,6 @@ macro_rules! wasi_function {
     }
 }
 
-/*
-pub(super) fn fd_write(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    let arg0 = args.get(0);
-    let arg0 = arg0.integer_value(scope).unwrap() as i32;
-    let arg1 = args.get(1);
-    let arg1 = arg1.integer_value(scope).unwrap() as i32;
-    let arg2 = args.get(2);
-    let arg2 = arg2.integer_value(scope).unwrap() as i32;
-    let arg3 = args.get(3);
-
-    if arg3.is_big_int() {
-        let bigint = arg3.to_big_int(scope).unwrap();
-        // to i64
-        bigint.i64_value().0
-        //let arg3 = arg3.integer_value(scope).unwrap() as i32;
-    } else {
-        arg3.integer_value(scope).unwrap()
-    };
-
-    let bigint = arg3.to_big_int(scope).unwrap();
-    // to i64
-    let arg3 = bigint.i64_value();
-    //let arg3 = arg3.integer_value(scope).unwrap() as i32;
-
-
-    let mut memory = get_memory_from_scope(scope);
-    let mut wasi_ctx = get_wasi_ctx_mut().lock().unwrap();
-    let result = TokioRuntime::new()
-        .unwrap()
-        .block_on(preview1::fd_write(
-            &mut *wasi_ctx,
-            &mut memory,
-            arg0,
-            arg1,
-            arg2,
-            arg3,
-        ))
-        .unwrap();
-
-    rv.set(v8::Integer::new(scope, result).into());
-}
-*/
-
 wasi_function!(wasi_snapshot_preview1_args_get, args_get, arg0: i32, arg1: i32);
 wasi_function!(wasi_snapshot_preview1_args_sizes_get, args_sizes_get, arg0: i32, arg1: i32);
 wasi_function!(wasi_snapshot_preview1_clock_res_get, clock_res_get, arg0: i32, arg1: i32);

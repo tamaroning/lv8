@@ -19,7 +19,7 @@ cargo run <WASM FILE>
 To run the hello world example:
 
 ```bash
-cargo run hello.wasm
+cargo run examples/hello.wasm
 ```
 
 ## Run LLM (llama2.c)

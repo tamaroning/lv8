@@ -22,6 +22,15 @@ To run the hello world example:
 cargo run hello.wasm
 ```
 
+## Run LLM (llama2.c)
+
+The current directory (and its children) is mounted to the wasm runtime, so you can run the LLM example like this:
+
+```bash
+cd examples/llama2-c
+cargo run llama2-c.wasm -- model.bin -n 256 -i 'Once upon a time'
+```
+
 # License
 
 MIT
